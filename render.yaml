@@ -1,0 +1,54 @@
+# Render Blueprint: one web service (FastAPI + the built React app) and a free Postgres.
+# Deploy: Render dashboard -> New -> Blueprint -> pick this repo. Then fill the `sync: false` secrets.
+services:
+  - type: web
+    name: penny
+    runtime: python
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build
+    startCommand: uvicorn backend.run:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: penny-db
+          property: connectionString
+      - key: PAYPAL_ENV
+        value: sandbox
+      - key: PAYPAL_API_BASE
+        value: https://api-m.sandbox.paypal.com
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false                      # after registering https://<your-app>.onrender.com/webhooks/paypal
+      - key: PAYPAL_PAYOUT_RECEIVER_EMAIL
+        sync: false
+      - key: VITE_PAYPAL_CLIENT_ID       # baked into the frontend at build time (sandbox client id is public)
+        sync: false
+      - key: BROKER_MODE
+        value: alpaca
+      - key: ALPACA_API_KEY_ID
+        sync: false
+      - key: ALPACA_SECRET_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: llama-3.3-70b-versatile
+      - key: CHANNEL3_API_KEY
+        sync: false
+      - key: RISK_PROFILE
+        value: growth
+      - key: SEED_ON_START
+        value: "true"
+      - key: LOG_LEVEL
+        value: INFO
+
+databases:
+  - name: penny-db
+    databaseName: penny
+    plan: free

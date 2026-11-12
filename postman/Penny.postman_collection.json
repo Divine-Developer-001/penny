@@ -1,0 +1,600 @@
+{
+  "info": {
+    "name": "Penny",
+    "description": "Cashback micro-investing API. Run top to bottom against a seeded server (SEED_ON_START=true). Simulated cashback, paper trading, not financial advice.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "productId",
+      "value": "hp-aurora"
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    },
+    {
+      "key": "proposalId",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Store",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "What is configured and which broker is live."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "products"
+              ]
+            },
+            "description": "Products are stored in the database. Optional ?q= search."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json(); pm.test('has products', () => pm.expect(p.length).to.be.above(0)); pm.collectionVariables.set('productId', p[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Better deals (Channel3 or sample)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/deals?product_id={{productId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deals"
+              ],
+              "query": [
+                {
+                  "key": "product_id",
+                  "value": "{{productId}}"
+                }
+              ]
+            },
+            "description": "Top 3 offers. `sample: true` when no CHANNEL3_API_KEY is set. The key never leaves the server."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json(); pm.test('3 offers', () => pm.expect(d.offers.length).to.be.at.most(3).and.above(0));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Checkout",
+      "item": [
+        {
+          "name": "Create order (simulated, API-only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders"
+              ]
+            },
+            "description": "The price always comes from the server. Use mode `paypal` from the web app's PayPal buttons (the buyer must approve in the sandbox popup before capture).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": \"{{productId}}\",\n  \"mode\": \"simulated\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('orderId', pm.response.json().order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Capture order",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{orderId}}/capture",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "{{orderId}}",
+                "capture"
+              ]
+            },
+            "description": "Captures the payment and credits SIMULATED cashback (idempotent; the webhook uses the same capture key)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('cashback credited', () => pm.expect(Number(pm.response.json().cashback)).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Simulated PAYMENT.CAPTURE.COMPLETED webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/paypal",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                "paypal"
+              ]
+            },
+            "description": "Works only while PAYPAL_WEBHOOK_ID=WEBHOOK_ID in the sandbox (PayPal simulator mode). Real events are signature-verified.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"WH-POSTMAN-1\",\n  \"event_type\": \"PAYMENT.CAPTURE.COMPLETED\",\n  \"resource\": {\n    \"id\": \"CAP-POSTMAN-1\",\n    \"status\": \"COMPLETED\",\n    \"amount\": {\n      \"currency_code\": \"USD\",\n      \"value\": \"50.00\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('acknowledged', () => pm.expect(pm.response.code).to.be.oneOf([200, 401]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Portfolio",
+      "item": [
+        {
+          "name": "State (widget data)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/state",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "state"
+              ]
+            },
+            "description": "Pot, holdings, totals, activity, approvals and the latest payout in one call."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const s = pm.response.json(); pm.test('has totals', () => pm.expect(s.totals).to.have.property('total_value'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "History (chart)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/history?days=30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "[{t, value, invested_cost}] plus a live point."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "events"
+              ]
+            },
+            "description": "Append-only ledger events."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Explain (last 50 one-liners)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/explain",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "explain"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set risk profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ]
+            },
+            "description": "conservative | balanced | growth",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profile\": \"growth\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Agent",
+      "item": [
+        {
+          "name": "Run the agent once",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agent/run",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "run"
+              ]
+            },
+            "description": "LLM proposes through tools, the policy engine decides. `mode` is llm, llm+planner or rule_based (with `llm_error` explaining why)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json(); if (r.proposal_ids && r.proposal_ids.length) pm.collectionVariables.set('proposalId', r.proposal_ids[0]);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve a proposal",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/proposals/{{proposalId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "proposals",
+                "{{proposalId}}",
+                "approve"
+              ]
+            },
+            "description": "Only for proposals above the auto-approve cap (PENDING_APPROVAL)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 or 409', () => pm.expect(pm.response.code).to.be.oneOf([200, 409, 404]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject a proposal",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/proposals/{{proposalId}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "proposals",
+                "{{proposalId}}",
+                "reject"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 or 409', () => pm.expect(pm.response.code).to.be.oneOf([200, 409, 404]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Undo a proposal (inside the undo window)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/proposals/{{proposalId}}/undo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "proposals",
+                "{{proposalId}}",
+                "undo"
+              ]
+            },
+            "description": "409 once the undo window has passed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 or 409', () => pm.expect(pm.response.code).to.be.oneOf([200, 409, 404]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Withdraw",
+      "item": [
+        {
+          "name": "Withdraw cash from the pot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/withdraw",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "withdraw"
+              ]
+            },
+            "description": "PayPal sandbox Payout. Needs PayPal credentials; set include_investments=true to sell holdings pro rata when the cash is not enough.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": \"1.00\",\n  \"include_investments\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200, 422 (not enough cash) or 502 (no PayPal creds)', () => pm.expect(pm.response.code).to.be.oneOf([200, 422, 502]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
