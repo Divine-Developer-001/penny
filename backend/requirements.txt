@@ -9,3 +9,4 @@ apscheduler>=3.10,<4
 cryptography>=42
 pytest>=8
 psycopg2-binary>=2.9
+channel3-sdk
